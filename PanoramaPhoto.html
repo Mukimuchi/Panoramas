@@ -1,0 +1,166 @@
+<!-- 360度パノラマ画像の表示 -->
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1" />
+        <style>
+			html, body {
+				width: 100%;
+				height: 100%;
+				margin: 0;
+				padding: 0;
+				overflow: hidden;
+			}
+			#container {
+				width: 100%;
+				height: 100%;
+				position: absolute;
+				top: 0;
+				left: 0;
+			}
+		</style>
+		<script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.175.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.175.0/examples/jsm/"
+            }
+        }
+        </script>
+    </head>
+    <body>
+        <div id="container"></div>
+        <script type="module">
+            import * as THREE from "three";
+            
+
+            let camera, scene, renderer;
+
+            let isUserInteracting = false,
+                onPointerDownPointerX = 0, onPointerDownPointerY = 0,
+                lon = 0, onPointerDownLon = 0,
+                lat = 0, onPointerDownLat = 0,
+                phi = 0, theta = 0;
+
+            init();
+
+            function init() {
+
+                const container = document.getElementById("container");
+
+                camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 1100);
+
+                scene = new THREE.Scene();
+
+                const geometry = new THREE.SphereGeometry(500, 60, 40);
+                // ジオメトリをx軸反転させることで、法線を反転させる
+                geometry.scale(-1, 1, 1);
+
+                //テクスチャを画像URLから読み込む
+                const urlParams = new URLSearchParams(window.location.search);
+                const imageUrl = urlParams.get("image_url");
+
+                if(!imageUrl){
+                    console.error("画像URLが指定されていません。");
+                    return;
+                }
+
+                const texture = new THREE.TextureLoader().load(imageUrl);
+
+                texture.colorSpace = THREE.SRGBColorSpace;
+                const material = new THREE.MeshBasicMaterial({ map: texture });
+
+                const mesh = new THREE.Mesh(geometry, material);
+
+                scene.add(mesh);
+
+                renderer = new THREE.WebGLRenderer();
+                renderer.setPixelRatio(window.devicePixelRatio);
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.setAnimationLoop(animate);
+                container.appendChild(renderer.domElement);
+
+                container.style.touchAction = "none";
+                container.addEventListener("pointerdown", onPointerDown);
+
+                document.addEventListener("wheel", onDocumentMouseWheel);
+
+                window.addEventListener("resize", onWindowResize);
+
+            }
+            
+            function onWindowResize(){
+
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+            
+
+            function onPointerDown(event){
+                if(event.isPrimary === false) return; //マルチタッチなどで最初のポインターでない場合は無視
+
+                isUserInteracting = true;
+
+                onPointerDownPointerX = event.clientX;
+                onPointerDownPointerY = event.clientY;
+
+                onPointerDownLon = lon;
+                onPointerDownLat = lat;
+
+                document.addEventListener("pointermove", onPointerMove);
+                document.addEventListener("pointerup", onPointerUp);
+            }
+
+            function onPointerMove(event){
+                if(event.isPrimary === false) return;
+
+				//FOVに応じて感度を補正（FOVが小さいほど感度を下げる）
+				const sensitivity = camera.fov / 90;
+                lon = (onPointerDownPointerX - event.clientX) * 0.1 * sensitivity + onPointerDownLon;
+                lat = (event.clientY - onPointerDownPointerY) * 0.1 * sensitivity + onPointerDownLat;
+
+            }
+
+            function onPointerUp(event){
+                if(event.isPrimary === false) return;
+
+                isUserInteracting = false;
+
+                document.removeEventListener("pointermove", onPointerMove);
+                document.removeEventListener("pointerup", onPointerUp);
+            }
+
+            function onDocumentMouseWheel(event){
+                const fov = camera.fov + event.deltaY * 0.05;
+
+                camera.fov = THREE.MathUtils.clamp(fov, 10, 75);
+
+                camera.updateProjectionMatrix();
+            }
+
+            function animate(){
+                //if(isUserInteracting === false){
+
+                //    lon += 0.1;
+
+                //}
+
+                lat = Math.max(-85, Math.min(85, lat)); // 緯度を制限
+                phi = THREE.MathUtils.degToRad(90 - lat);
+                theta = THREE.MathUtils.degToRad(lon);
+
+                const x = 500 * Math.sin(phi) * Math.cos(theta);
+                const y = 500 * Math.cos(phi);
+                const z = 500 * Math.sin(phi) * Math.sin(theta);
+
+                camera.lookAt(x, y, z);
+
+                renderer.render(scene, camera);
+            }
+
+        </script>
+    </body>
+</html>
