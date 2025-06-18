@@ -158,11 +158,12 @@
                     listItem.innerHTML = `
                     <span>
                         <strong><span class="math-inline">\{data\.title\}</strong\><br\>
-                        <small>{new Date(data.uploadDate.toDate()).toLocaleString()}</small>
+                    <small\></span>{new Date(data.uploadDate.toDate()).toLocaleString()}</small>
                     </span>
                     <div>
-                        <button onclick="window.open(data.imageUrl', '_blank')">画像を見る</button><buttononclick="window.open('panorama.html?image url={encodeURIComponent(data.imageUrl)}', '_blank')">パノラマで見る</button>
-                    <button class="delete" data-id="doc.id"data-filename="{data.filename}">削除</button>
+                        <button onclick="window.open('<span class="math-inline">\{data\.imageUrl\}', '\_blank'\)"\>画像を見る</button\>
+                    <button onclick\="window\.open\('PanoramaPhoto\.html?image\_url\=</span>{encodeURIComponent(data.imageUrl)}', '_blank')">パノラマで見る</button>
+                        <button class="delete" data-id="<span class="math-inline">\{doc\.id\}" data\-filename\="</span>{data.filename}">削除</button>
                     </div>
                     `;
                     panoramaList.appendChild(listItem);
