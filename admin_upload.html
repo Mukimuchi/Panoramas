@@ -53,7 +53,14 @@
     </div>
 
     <script type="module">
-        import { auth, storage, db, onAuthStateChanged, signOut, ref, uploadBytes, getDownloadURL, collection, addDoc, getDocs, query, orderBy, deleteDoc, doc } from './js/firebase-init.js';
+         // firebase-init.js からは、初期化されたサービスインスタンス（auth, storage, db）のみをインポート
+        import { auth, storage, db } from './js/firebase-init.js'; 
+
+        // 各Firebaseサービス固有の関数は、それぞれのSDKから直接インポート
+        import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import { ref, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js"; // deleteObjectもここでインポート
+        import { collection, addDoc, getDocs, query, orderBy, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
 
         const userStatus = document.getElementById('userStatus');
         const logoutButton = document.getElementById('logoutButton');
