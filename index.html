@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>360°パノラマギャラリー</title>
+    <style>
+        /* ここにギャラリーページのCSSスタイルを記述します */
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 0; 
+            padding: 20px; 
+            background-color: #f4f4f4; 
+            color: #333;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        .header h1 {
+            color: #007bff;
+            margin-bottom: 10px;
+        }
+        .gallery-grid {
+            display: grid;
+            /* 画面幅に合わせて自動的にカラム数を調整 */
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+            max-width: 1200px;
+            margin: 0 auto; /* 中央寄せ */
+        }
+        .gallery-item {
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden; /* 画像がはみ出さないように */
+            text-align: center;
+            transition: transform 0.2s ease-in-out; /* ホバー時のアニメーション */
+            cursor: pointer; /* クリック可能であることを示すカーソル */
+        }
+        .gallery-item:hover {
+            transform: translateY(-5px); /* 少し上に浮き上がるエフェクト */
+        }
+        .gallery-item img {
+            width: 100%;
+            height: 200px; /* サムネイル画像の固定高さ */
+            object-fit: cover; /* 画像がアスペクト比を維持しつつ要素を埋める */
+            display: block; /* 余分なスペースをなくす */
+        }
+        .gallery-item-info {
+            padding: 15px;
+        }
+        .gallery-item-info h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            color: #333;
+            font-size: 1.2em;
+        }
+        .gallery-item-info p {
+            font-size: 0.9em;
+            color: #666;
+        }
+        #loadingMessage {
+            text-align: center;
+            font-size: 1.1em;
+            color: #555;
+        }
+        .no-images {
+            text-align: center;
+            font-size: 1.1em;
+            color: #555;
+            margin-top: 50px;
+        }
+        .admin-link {
+            text-align: center;
+            margin-top: 40px;
+        }
+        .admin-link a {
+            color: #007bff;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        .admin-link a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>360°パノラマギャラリー</h1>
+        <p>様々なパノラマ画像をお楽しみください。</p>
+    </div>
+
+    <div id="loadingMessage">画像を読み込み中...</div>
+    <div id="galleryContainer" class="gallery-grid">
+        </div>
+    <div id="noImagesMessage" class="no-images" style="display:none;">
+        まだパノラマ画像がアップロードされていません。
+    </div>
+
+    <div class="admin-link">
+        <p><a href="admin.html">管理者ログイン・アップロード画面へ</a></p>
+    </div>
+
+    <script type="module">
+        // firebase-init.js からは、初期化されたサービスインスタンス（db）のみをインポート
+        import { db } from './js/firebase-init.js'; 
+        // Firestore SDKから必要な関数をインポート
+        import { collection, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+        const galleryContainer = document.getElementById('galleryContainer');
+        const loadingMessage = document.getElementById('loadingMessage');
+        const noImagesMessage = document.getElementById('noImagesMessage');
+
+        // パノラマ画像一覧を取得して表示する関数
+        async function fetchAndDisplayPanoramas() {
+            loadingMessage.style.display = 'block'; // ローディングメッセージ表示
+            galleryContainer.innerHTML = ''; // ギャラリーをクリア
+            noImagesMessage.style.display = 'none'; // 「画像なし」メッセージを非表示
+
+            try {
+                // Firestoreの'panoramas'コレクションからデータを取得し、uploadDateの新しい順にソート
+                const q = query(collection(db, "panoramas"), orderBy("uploadDate", "desc"));
+                const querySnapshot = await getDocs(q);
+
+                if (querySnapshot.empty) {
+                    loadingMessage.style.display = 'none'; // ローディングメッセージ非表示
+                    noImagesMessage.style.display = 'block'; // 「画像なし」メッセージ表示
+                    return;
+                }
+
+                querySnapshot.forEach((doc) => {
+                    const data = doc.data();
+                    const galleryItem = document.createElement('div');
+                    galleryItem.className = 'gallery-item';
+                    // クリックでパノラマビューアに遷移
+                    galleryItem.onclick = () => {
+                        // GitHub Pagesのパスを考慮したURL構築
+                        // 例: https://mukimuchi.github.io/Panoramas/PanoramaPhoto.html
+                        // index.htmlと同じ階層にあるので、相対パスは './PanoramaPhoto.html'
+                        window.location.href = `PanoramaPhoto.html?image_url=${encodeURIComponent(data.imageUrl)}`;
+                    };
+
+                    // サムネイル画像は、アップロードされたパノラマ画像自体を縮小して表示
+                    galleryItem.innerHTML = `
+                        <img src="${data.imageUrl}" alt="${data.title}">
+                        <div class="gallery-item-info">
+                            <h3>${data.title}</h3>
+                            <p>${data.description || '説明なし'}</p>
+                            <p><small>アップロード日: ${new Date(data.uploadDate.toDate()).toLocaleDateString()}</small></p>
+                        </div>
+                    `;
+                    galleryContainer.appendChild(galleryItem);
+                });
+                loadingMessage.style.display = 'none'; // ローディングメッセージ非表示
+
+            } catch (error) {
+                console.error("画像一覧の取得エラー:", error);
+                loadingMessage.textContent = '画像の読み込み中にエラーが発生しました。';
+                loadingMessage.style.color = 'red';
+            }
+        }
+
+        // ページ読み込み時に画像一覧を取得
+        document.addEventListener('DOMContentLoaded', fetchAndDisplayPanoramas);
+    </script>
+</body>
+</html>
