@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>パノラマ画像アップロード - 管理者</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f4; }
+        .container { background-color: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 800px; margin: 20px auto; }
+        h1 { text-align: center; color: #333; }
+        .upload-section, .list-section { margin-top: 30px; border-top: 1px solid #eee; padding-top: 20px; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; }
+        input[type="file"], input[type="text"], textarea { width: calc(100% - 22px); padding: 10px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 4px; }
+        button { padding: 10px 20px; background-color: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; margin-right: 10px; }
+        button:hover { background-color: #218838; }
+        button.logout { background-color: #dc3545; }
+        button.logout:hover { background-color: #c82333; }
+        #statusMessage { margin-top: 15px; font-weight: bold; }
+        .panorama-list { list-style: none; padding: 0; }
+        .panorama-item { background-color: #f9f9f9; border: 1px solid #eee; padding: 15px; margin-bottom: 10px; border-radius: 5px; display: flex; justify-content: space-between; align-items: center; }
+        .panorama-item button { margin-left: 10px; background-color: #ffc107; color: #333; }
+        .panorama-item button.delete { background-color: #dc3545; color: white; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>パノラマ画像 管理者画面</h1>
+        <p id="userStatus">ログインしていません。</p>
+        <button id="logoutButton" style="display:none;">ログアウト</button>
+
+        <div id="uploadSection" style="display:none;">
+            <div class="upload-section">
+                <h2>新規画像アップロード</h2>
+                <label for="panoramaFile">パノラマ画像ファイル:</label>
+                <input type="file" id="panoramaFile" accept="image/*" required>
+
+                <label for="imageTitle">タイトル:</label>
+                <input type="text" id="imageTitle" placeholder="画像のタイトル" required>
+
+                <label for="imageDescription">説明 (任意):</label>
+                <textarea id="imageDescription" placeholder="画像の説明"></textarea>
+
+                <button id="uploadButton">アップロード</button>
+                <p id="statusMessage"></p>
+            </div>
+
+            <div class="list-section">
+                <h2>既存画像一覧</h2>
+                <ul id="panoramaList">
+                    </ul>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { auth, storage, db, onAuthStateChanged, signOut, ref, uploadBytes, getDownloadURL, collection, addDoc, getDocs, query, orderBy, deleteDoc, doc } from './js/firebase-init.js';
+
+        const userStatus = document.getElementById('userStatus');
+        const logoutButton = document.getElementById('logoutButton');
+        const uploadSection = document.getElementById('uploadSection');
+        const panoramaFile = document.getElementById('panoramaFile');
+        const imageTitle = document.getElementById('imageTitle');
+        const imageDescription = document.getElementById('imageDescription');
+        const uploadButton = document.getElementById('uploadButton');
+        const statusMessage = document.getElementById('statusMessage');
+        const panoramaList = document.getElementById('panoramaList');
+
+        // 認証状態の監視
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                // ログイン済みの場合
+                userStatus.textContent = `ログイン中: ${user.email}`;
+                logoutButton.style.display = 'inline-block';
+                uploadSection.style.display = 'block';
+                fetchPanoramas(); // ログインしたら画像一覧を読み込む
+            } else {
+                // ログアウト済みの場合
+                userStatus.textContent = 'ログインしていません。';
+                logoutButton.style.display = 'none';
+                uploadSection.style.display = 'none';
+                alert('ログインが必要です。管理者ログインページに移動します。');
+                window.location.href = 'admin.html'; // ログインページにリダイレクト
+            }
+        });
+
+        // ログアウト処理
+        logoutButton.addEventListener('click', async () => {
+            try {
+                await signOut(auth);
+                alert('ログアウトしました。');
+                window.location.href = 'admin.html'; // ログインページにリダイレクト
+            } catch (error) {
+                console.error("ログアウトエラー:", error);
+                alert('ログアウトに失敗しました。');
+            }
+        });
+
+        // 画像アップロード処理
+        uploadButton.addEventListener('click', async () => {
+            const file = panoramaFile.files[0];
+            const title = imageTitle.value;
+            const description = imageDescription.value;
+
+            if (!file || !title) {
+                statusMessage.textContent = '画像ファイルとタイトルは必須です。';
+                statusMessage.style.color = 'red';
+                return;
+            }
+
+            statusMessage.textContent = 'アップロード中...';
+            statusMessage.style.color = 'blue';
+
+            try {
+                // 1. Firebase Storageに画像をアップロード
+                const storageRef = ref(storage, `panoramas/${file.name}`);
+                const uploadTask = await uploadBytes(storageRef, file);
+                const imageUrl = await getDownloadURL(uploadTask.ref); // 公開URLを取得
+
+                // 2. Firestoreに画像情報を保存
+                await addDoc(collection(db, "panoramas"), {
+                    title: title,
+                    description: description,
+                    filename: file.name,
+                    imageUrl: imageUrl, // Storageの公開URL
+                    uploadDate: new Date()
+                });
+
+                statusMessage.textContent = 'アップロード成功！';
+                statusMessage.style.color = 'green';
+                imageTitle.value = '';
+                imageDescription.value = '';
+                panoramaFile.value = ''; // ファイル選択をクリア
+                fetchPanoramas(); // リストを更新
+
+            } catch (error) {
+                console.error("アップロードエラー:", error);
+                statusMessage.textContent = `アップロード失敗: ${error.message}`;
+                statusMessage.style.color = 'red';
+            }
+        });
+
+        // Firestoreから画像一覧を取得して表示する関数
+        async function fetchPanoramas() {
+            panoramaList.innerHTML = ''; // リストをクリア
+            try {
+                const q = query(collection(db, "panoramas"), orderBy("uploadDate", "desc"));
+                const querySnapshot = await getDocs(q);
+
+                if (querySnapshot.empty) {
+                    panoramaList.innerHTML = '<li>アップロードされた画像がありません。</li>';
+                    return;
+                }
+
+                querySnapshot.forEach((doc) => {
+                    const data = doc.data();
+                    const listItem = document.createElement('li');
+                    listItem.className = 'panorama-item';
+                    listItem.innerHTML = `
+                    <span>
+                        <strong><span class="math-inline">\{data\.title\}</strong\><br\>
+                        <small>{new Date(data.uploadDate.toDate()).toLocaleString()}</small>
+                    </span>
+                    <div>
+                        <button onclick="window.open(data.imageUrl', '_blank')">画像を見る</button><buttononclick="window.open('panorama.html?image url={encodeURIComponent(data.imageUrl)}', '_blank')">パノラマで見る</button>
+                    <button class="delete" data-id="doc.id"data-filename="{data.filename}">削除</button>
+                    </div>
+                    `;
+                    panoramaList.appendChild(listItem);
+                });
+                 // 削除ボタンのイベントリスナーを設定
+                panoramaList.querySelectorAll('.delete').forEach(button => {
+                    button.addEventListener('click', async (e) => {
+                        if (confirm('本当にこの画像を削除しますか？')) {
+                            const docId = e.target.dataset.id;
+                            const filename = e.target.dataset.filename;
+                            try {
+                                // Storageからファイルを削除
+                                const fileRef = ref(storage, `panoramas/${filename}`);
+                                await deleteObject(fileRef); // Firebase Storageからファイルを削除
+                                
+                                // Firestoreからドキュメントを削除
+                                await deleteDoc(doc(db, "panoramas", docId));
+                                alert('画像を削除しました。');
+                                fetchPanoramas(); // リストを更新
+                            } catch (error) {
+                                console.error("削除エラー:", error);
+                                alert(`削除に失敗しました: ${error.message}`);
+                            }
+                        }
+                    });
+                });
+
+            } catch (error) {
+                console.error("画像一覧の取得エラー:", error);
+                panoramaList.innerHTML = `<li style="color:red;">画像一覧の取得に失敗しました: ${error.message}</li>`;
+            }
+        }
+
+        // Storageからファイルを削除するためのインポートを追加
+        import { deleteObject } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
+    </script>
+</body>
+</html>
+```
+
+**変更点:**
+
+  * `firebase-init.js` をインポートしています。
+  * `onAuthStateChanged` でログイン状態を監視し、ログインしていない場合は`admin.html`にリダイレクトします。
+  * ログアウトボタンの処理を追加しました。
+  * 画像アップロードフォームと、その処理（Storageへのアップロード、Firestoreへの情報保存）を追加しました。
+  * アップロード済みの画像一覧をFirestoreから取得し、表示する機能（`fetchPanoramas`）を追加しました。
+  * 画像削除機能（StorageとFirestoreの両方から）を追加しました。
