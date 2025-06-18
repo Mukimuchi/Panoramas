@@ -164,18 +164,18 @@
                     listItem.className = 'panorama-item';
                     listItem.innerHTML = `
                     <span>
-                        <strong><span class="math-inline">\{data\.title\}</strong\><br\>
-                    <small\></span>{new Date(data.uploadDate.toDate()).toLocaleString()}</small>
+                        <strong>${data.title}</strong><br>
+                        <small>${new Date(data.uploadDate.toDate()).toLocaleString()}</small>
                     </span>
                     <div>
-                        <button onclick="window.open('<span class="math-inline">\{data\.imageUrl\}', '\_blank'\)"\>画像を見る</button\>
-                    <button onclick\="window\.open\('PanoramaPhoto\.html?image\_url\=</span>{encodeURIComponent(data.imageUrl)}', '_blank')">パノラマで見る</button>
-                        <button class="delete" data-id="<span class="math-inline">\{doc\.id\}" data\-filename\="</span>{data.filename}">削除</button>
+                        <button onclick="window.open('${data.imageUrl}', '_blank')">画像を見る</button>
+                        <button onclick="window.open('PanoramaPhoto.html?image_url=${encodeURIComponent(data.imageUrl)}', '_blank')">パノラマで見る</button>
+                        <button class="delete" data-id="${doc.id}" data-filename="${data.filename}">削除</button>
                     </div>
                     `;
                     panoramaList.appendChild(listItem);
                 });
-                 // 削除ボタンのイベントリスナーを設定
+                // 削除ボタンのイベントリスナーを設定
                 panoramaList.querySelectorAll('.delete').forEach(button => {
                     button.addEventListener('click', async (e) => {
                         if (confirm('本当にこの画像を削除しますか？')) {
@@ -206,13 +206,3 @@
     </script>
 </body>
 </html>
-```
-
-**変更点:**
-
-  * `firebase-init.js` をインポートしています。
-  * `onAuthStateChanged` でログイン状態を監視し、ログインしていない場合は`admin.html`にリダイレクトします。
-  * ログアウトボタンの処理を追加しました。
-  * 画像アップロードフォームと、その処理（Storageへのアップロード、Firestoreへの情報保存）を追加しました。
-  * アップロード済みの画像一覧をFirestoreから取得し、表示する機能（`fetchPanoramas`）を追加しました。
-  * 画像削除機能（StorageとFirestoreの両方から）を追加しました。
