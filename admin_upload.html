@@ -53,14 +53,13 @@
     </div>
 
     <script type="module">
-         // firebase-init.js からは、初期化されたサービスインスタンス（auth, storage, db）のみをインポート
+        // firebase-init.js からは、初期化されたサービスインスタンス（auth, storage, db）のみをインポート
         import { auth, storage, db } from './js/firebase-init.js'; 
 
         // 各Firebaseサービス固有の関数は、それぞれのSDKから直接インポート
         import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-        import { ref, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js"; // deleteObjectもここでインポート
-        import { collection, addDoc, getDocs, query, orderBy, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-
+        import { ref, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
+        import { collection, addDoc, getDocs, query, orderBy, deleteDoc, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js"; // updateDoc を追加
 
         const userStatus = document.getElementById('userStatus');
         const logoutButton = document.getElementById('logoutButton');
@@ -71,6 +70,49 @@
         const uploadButton = document.getElementById('uploadButton');
         const statusMessage = document.getElementById('statusMessage');
         const panoramaList = document.getElementById('panoramaList');
+
+        // モーダル関連の要素を定義 (追加)
+        const editModal = document.createElement('div');
+        editModal.id = 'editModal';
+        editModal.style.cssText = `
+            display: none; /* Hidden by default */
+            position: fixed; /* Stay in place */
+            z-index: 1; /* Sit on top */
+            left: 0;
+            top: 0;
+            width: 100%; /* Full width */
+            height: 100%; /* Full height */
+            overflow: auto; /* Enable scroll if needed */
+            background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+            padding-top: 60px;
+        `;
+        editModal.innerHTML = `
+            <div style="background-color: #fefefe; margin: 5% auto; padding: 20px; border: 1px solid #888; width: 80%; max-width: 500px; border-radius: 8px;">
+                <span class="close" style="color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer;">&times;</span>
+                <h2>画像情報を編集</h2>
+                <input type="hidden" id="editDocId">
+                <label for="editTitle">タイトル:</label>
+                <input type="text" id="editTitle" required style="width: calc(100% - 22px);">
+                <label for="editDescription">説明 (任意):</label>
+                <textarea id="editDescription" style="width: calc(100% - 22px);"></textarea>
+                <button id="saveEditButton" style="background-color: #007bff;">変更を保存</button>
+            </div>
+        `;
+        document.body.appendChild(editModal); // bodyの最後にモーダル要素を追加
+
+        const closeEditModal = editModal.querySelector('.close');
+        const editDocId = document.getElementById('editDocId');
+        const editTitle = document.getElementById('editTitle');
+        const editDescription = document.getElementById('editDescription');
+        const saveEditButton = document.getElementById('saveEditButton');
+
+        closeEditModal.onclick = () => editModal.style.display = 'none';
+        window.onclick = (event) => {
+            if (event.target == editModal) {
+                editModal.style.display = 'none';
+            }
+        };
+
 
         // 認証状態の監視
         onAuthStateChanged(auth, (user) => {
@@ -152,30 +194,48 @@
             try {
                 const q = query(collection(db, "panoramas"), orderBy("uploadDate", "desc"));
                 const querySnapshot = await getDocs(q);
-
+                
                 if (querySnapshot.empty) {
                     panoramaList.innerHTML = '<li>アップロードされた画像がありません。</li>';
                     return;
                 }
 
-                querySnapshot.forEach((doc) => {
-                    const data = doc.data();
+                querySnapshot.forEach((docItem) => { // 'doc' との衝突を避けるため 'docItem' に変更
+                    const data = docItem.data();
                     const listItem = document.createElement('li');
                     listItem.className = 'panorama-item';
                     listItem.innerHTML = `
-                    <span>
-                        <strong>${data.title}</strong><br>
-                        <small>${new Date(data.uploadDate.toDate()).toLocaleString()}</small>
-                    </span>
-                    <div>
-                        <button onclick="window.open('${data.imageUrl}', '_blank')">画像を見る</button>
-                        <button onclick="window.open('PanoramaPhoto.html?image_url=${encodeURIComponent(data.imageUrl)}', '_blank')">パノラマで見る</button>
-                        <button class="delete" data-id="${doc.id}" data-filename="${data.filename}">削除</button>
-                    </div>
+                        <img src="${data.imageUrl}" alt="${data.title}" style="width: 100px; height: 60px; object-fit: cover; margin-right: 15px;">
+                        <span>
+                            <strong>${data.title}</strong><br>
+                            <small>${data.description ? data.description : '説明なし'}</small><br>
+                            <small>アップロード日: ${new Date(data.uploadDate.toDate()).toLocaleString()}</small>
+                        </span>
+                        <div>
+                            <button onclick="window.open('${data.imageUrl}', '_blank')">画像を見る</button>
+                            <button onclick="window.open('PanoramaPhoto.html?image_url=${encodeURIComponent(data.imageUrl)}', '_blank')">パノラマで見る</button>
+                            <button class="edit" data-id="${docItem.id}" data-title="${data.title}" data-description="${data.description || ''}">編集</button>
+                            <button class="delete" data-id="${docItem.id}" data-filename="${data.filename}">削除</button>
+                        </div>
                     `;
                     panoramaList.appendChild(listItem);
                 });
-                // 削除ボタンのイベントリスナーを設定
+
+                // 編集ボタンのイベントリスナーを設定 (追加)
+                panoramaList.querySelectorAll('.edit').forEach(button => {
+                    button.addEventListener('click', (e) => {
+                        const id = e.target.dataset.id;
+                        const title = e.target.dataset.title;
+                        const description = e.target.dataset.description;
+
+                        editDocId.value = id;
+                        editTitle.value = title;
+                        editDescription.value = description;
+                        editModal.style.display = 'block'; // モーダルを表示
+                    });
+                });
+
+                // 削除ボタンのイベントリスナーを設定 (既存)
                 panoramaList.querySelectorAll('.delete').forEach(button => {
                     button.addEventListener('click', async (e) => {
                         if (confirm('本当にこの画像を削除しますか？')) {
@@ -203,6 +263,33 @@
                 panoramaList.innerHTML = `<li style="color:red;">画像一覧の取得に失敗しました: ${error.message}</li>`;
             }
         }
+
+        // 変更を保存ボタンのイベントリスナー (追加)
+        saveEditButton.addEventListener('click', async () => {
+            const id = editDocId.value;
+            const newTitle = editTitle.value;
+            const newDescription = editDescription.value;
+
+            if (!newTitle) {
+                alert('タイトルは必須です。');
+                return;
+            }
+
+            try {
+                const panoramaRef = doc(db, "panoramas", id);
+                await updateDoc(panoramaRef, {
+                    title: newTitle,
+                    description: newDescription
+                });
+                alert('画像情報を更新しました。');
+                editModal.style.display = 'none'; // モーダルを閉じる
+                fetchPanoramas(); // リストを更新
+            } catch (error) {
+                console.error("更新エラー:", error);
+                alert(`更新に失敗しました: ${error.message}`);
+            }
+        });
+
     </script>
 </body>
 </html>
